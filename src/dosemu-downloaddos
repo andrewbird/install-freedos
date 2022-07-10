@@ -76,6 +76,16 @@ def download_file(source, destination_directory):
                 f.write(response.read())
     return destination_file
 
+
+def testexists(source, _):
+
+    url = urllib.parse.quote_plus(source, "\./_-:")
+
+    r = urllib.request.urlopen(url)
+    if r.getcode() == 200:
+        print('URL exists "%s"' % url)
+
+
 def download_pkg_info(freedos_url, packages, destination):
     for filename in packages:
         try:
@@ -83,44 +93,44 @@ def download_pkg_info(freedos_url, packages, destination):
         except urllib.error.HTTPError:
             print('WARNING: The chosen version of FreeDOS does not contain ' + filename + '!')
 
-def download_FREEDOS_USERSPACE_ARCHIVES(freedos_url, destination):
+def download_FREEDOS_USERSPACE_ARCHIVES(freedos_url, destination, action=download_file):
     print('Downloading FreeDOS userspace tools...')
     for filename in FREEDOS_USERSPACE_TOOLS:
         try:
-            download_file(freedos_url + '/base/' + filename + '.zip', destination)
+            action(freedos_url + '/base/' + filename + '.zip', destination)
         except urllib.error.HTTPError:
             print('WARNING: The chosen version of FreeDOS does not contain ' + filename + '!')
     for filename in FREEDOS_UNIXLIKE_ARCHIVES:
         try:
-            download_file(freedos_url + '/unix/' + filename + '.zip', destination)
+            action(freedos_url + '/unix/' + filename + '.zip', destination)
         except urllib.error.HTTPError:
             # utilities that are now in 'unixline' were previously in 'util'
             FREEDOS_UTIL_ARCHIVES.append(filename)
     for filename in FREEDOS_UTIL_ARCHIVES:
         try:
-            download_file(freedos_url + '/util/' + filename + '.zip', destination)
+            action(freedos_url + '/util/' + filename + '.zip', destination)
         except urllib.error.HTTPError:
             print('WARNING: The chosen version of FreeDOS does not contain ' + filename + '!')
     for filename in FREEDOS_NET_ARCHIVES:
         try:
-            download_file(freedos_url + '/net/' + filename + '.zip', destination)
+            action(freedos_url + '/net/' + filename + '.zip', destination)
         except urllib.error.HTTPError:
             print('WARNING: The chosen version of FreeDOS does not contain ' + filename + '!')
     for filename in FREEDOS_DEVEL_ARCHIVES:
         try:
-            download_file(freedos_url + '/devel/' + filename + '.zip', destination)
+            action(freedos_url + '/devel/' + filename + '.zip', destination)
         except urllib.error.HTTPError:
             print('WARNING: The chosen version of FreeDOS does not contain ' + filename + '!')
 
-def download_FREEDOS_FULL_ARCHIVES(freedos_url, destination):
+def download_FREEDOS_FULL_ARCHIVES(freedos_url, destination, action=download_file):
     print('Downloading FreeDOS kernel and FreeCOM...')
     for filename in FREEDOS_ARCHIVES_KERNEL_COMMAND:
         try:
-            download_file(freedos_url + '/base/' + filename + '.zip', destination)
+            action(freedos_url + '/base/' + filename + '.zip', destination)
         except urllib.error.HTTPError:
             print('WARNING: The chosen version of FreeDOS does not contain ' + filename + '!')
     print('Downloading extra FreeDOS userspace tools')
-    download_FREEDOS_USERSPACE_ARCHIVES(freedos_url, destination)
+    download_FREEDOS_USERSPACE_ARCHIVES(freedos_url, destination, action)
 
     print('Downloading done')
 
@@ -166,7 +176,9 @@ def derive_url_list(imgurl):
         imgurls.append(imgurl)
     return imgurls;
 
-def download_dos(dos_flavour, destination):
+def download_dos(dos_flavour, destination, testonly=False):
+    action = testexists if testonly else download_file
+
     os.makedirs(destination, exist_ok=True)
 
     if dos_flavour in ['freedos13userspace', 'freedos13', 'freedosuserspace']:
@@ -175,16 +187,18 @@ def download_dos(dos_flavour, destination):
         freedos_url = FREEDOS12_URL
 
     if dos_flavour in ['freedos12', 'freedos13']:
-        download_pkg_info(freedos_url, FREEDOS_ARCHIVES_KERNEL_COMMAND + FREEDOS_UNIXLIKE_ARCHIVES + FREEDOS_UTIL_ARCHIVES + FREEDOS_NET_ARCHIVES, destination)
-        download_FREEDOS_FULL_ARCHIVES(freedos_url, destination)
+        if not testonly:
+            download_pkg_info(freedos_url, FREEDOS_ARCHIVES_KERNEL_COMMAND + FREEDOS_UNIXLIKE_ARCHIVES + FREEDOS_UTIL_ARCHIVES + FREEDOS_NET_ARCHIVES, destination)
+        download_FREEDOS_FULL_ARCHIVES(freedos_url, destination, action)
     if dos_flavour in ['freedos13userspace', 'freedos13', 'freedos12userspace', 'freedos12', 'freedosuserspace']:
-        download_pkg_info(freedos_url, FREEDOS_USERSPACE_TOOLS, destination)
-        download_FREEDOS_USERSPACE_ARCHIVES(freedos_url, destination)
+        if not testonly:
+            download_pkg_info(freedos_url, FREEDOS_USERSPACE_TOOLS, destination)
+        download_FREEDOS_USERSPACE_ARCHIVES(freedos_url, destination, action)
         return
     if dos_flavour == 'freedos11':
-        download_FREEDOS_FULL_ARCHIVES(FREEDOS11_URL, destination)
+        download_FREEDOS_FULL_ARCHIVES(FREEDOS11_URL, destination, action)
     if dos_flavour in ['freedos11userspace', 'freedos11']:
-        download_FREEDOS_USERSPACE_ARCHIVES(FREEDOS11_URL, destination)
+        download_FREEDOS_USERSPACE_ARCHIVES(FREEDOS11_URL, destination, action)
         return
 
 parser = argparse.ArgumentParser(description="""Script to download either FreeDOS or a set of disk images.
@@ -196,6 +210,7 @@ parser.add_argument("-l", "--list", help="List available DOS variants", action="
 parser.add_argument("-o", "--os", help="Download the specified DOS", type=str)
 parser.add_argument("-d", "--destination", help="Specify/override the destination directory", type=str)
 parser.add_argument("-s", "--sha256sum", help="Specify one or more sha256sum(s)", nargs='+', type=str)
+parser.add_argument("-t", "--testonly", help="Test each of the URLs but don't download", action="store_true")
 
 args = parser.parse_args()
 if args.list:
@@ -213,4 +228,5 @@ if args.os:
         destination = args.destination
     else:
         destination = os.path.join(os.environ['HOME'], '.cache', 'dosemu', args.os.replace('userspace', ''))
-    download_dos(dos_to_download, destination)
+
+    download_dos(dos_to_download, destination, testonly=args.testonly)
